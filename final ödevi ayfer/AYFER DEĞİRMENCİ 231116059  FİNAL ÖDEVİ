@@ -1,0 +1,500 @@
+﻿django-admin startproject obs
+cd obs
+python manage.py startapp users
+python manage.py startapp students
+python manage.py startapp courses
+python manage.py startapp finances
+
+(settings.py)
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'users',
+    'students',
+    'courses',
+    'finances',
+]
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
+
+AUTH_USER_MODEL = 'users.User'  # Kullanıcı modelini belirt
+
+
+
+users/models.py
+
+from django.contrib.auth.models import AbstractUser
+from django.db import models
+
+class User(AbstractUser):
+    ROLE_CHOICES = [
+        ('admin', 'Yönetici'),
+        ('teacher', 'Öğretmen'),
+        ('student', 'Öğrenci'),
+        ('parent', 'Veli'),]
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+
+users/views.py
+
+from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login, logout
+from .models import User
+
+def login_view(request):
+    if request.method == 'POST':
+        username = request.POST['username']
+        password = request.POST['password']
+        user = authenticate(request, username=username, password=password)
+        if user:
+            login(request, user)
+        return redirect('dashboard')
+        else:
+        return render(request, 'login.html', {'error': 'Hatalı bilgiler'})
+    return render(request, 'login.html')
+
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+
+users/urls.py
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+]
+
+login.html
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Giriş Yap</title>
+</head>
+<body>
+    <h2>Giriş Yap</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="text" name="username" placeholder="Kullanıcı Adı">
+        <input type="password" name="password" placeholder="Şifre">
+        <button type="submit">Giriş</button>
+    </form>
+    {% if error %}
+    <p style="color: red;">{{ error }}</p>
+    {% endif %}
+</body>
+</html>
+students/models.py
+
+from django.db import models
+from users.models import User
+
+class Student(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
+    birth_date = models.DateField()
+    grade = models.CharField(max_length=5)
+
+students/views.py
+
+from django.shortcuts import render
+from .models import Student
+
+def student_list(request):
+    students = Student.objects.all()
+    return render(request, 'student_list.html', {'students': students})
+
+students/urls.py
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('students/', views.student_list, name='student_list'),
+]
+
+student_list.html
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Öğrenci Listesi</title>
+</head>
+<body>
+    <h2>Öğrenci Listesi</h2>
+    <ul>
+        {% for student in students %}
+        <li>{{ student.user.username }} - {{ student.grade }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
+
+
+
+courses/models.py
+
+from django.db import models
+
+class Course(models.Model):
+    name = models.CharField(max_length=50)
+    code = models.CharField(max_length=10)
+    teacher = models.ForeignKey('users.User', on_delete=models.CASCADE, limit_choices_to={'role': 'teacher'})
+
+courses/views.py
+
+from django.shortcuts import render
+from .models import Course
+
+def course_list(request):
+    courses = Course.objects.all()
+    return render(request, 'course_list.html', {'courses': courses})
+
+courses/urls.py
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('courses/', views.course_list, name='course_list'),
+]
+
+course_list.html
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ders Listesi</title>
+</head>
+<body>
+    <h2>Ders Listesi</h2>
+    <ul>
+        {% for course in courses %}
+        <li>{{ course.name }} - {{ course.teacher.username }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
+
+finances/models.py
+
+from django.db import models
+from students.models import Student
+
+class Payment(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    date = models.DateField(auto_now_add=True)
+
+finances/views.py
+
+from django.shortcuts import render
+from .models import Payment
+
+def payment_list(request):
+    payments = Payment.objects.all()
+    return render(request, 'payment_list.html', {'payments': payments})
+
+finances/urls.py
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('payments/', views.payment_list, name='payment_list'),
+]
+
+payment_list.html
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ödeme Listesi</title>
+</head>
+<body>
+    <h2>Ödeme Listesi</h2>
+    <ul>
+     {% for payment in payments %}
+     <li>{{ payment.student.user.username }} - {{ payment.amount }} TL</li>
+     {% endfor %}
+    </ul>
+</body>
+</html>
+
+
+obs/urls.py
+
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('users/', include('users.urls')),
+    path('students/', include('students.urls')),
+    path('courses/', include('courses.urls')),
+    path('finances/', include('finances.urls')),
+]
+
+python manage.py makemigrations
+python manage.py migratedjango-admin startproject obs
+cd obs
+python manage.py startapp users
+python manage.py startapp students
+python manage.py startapp courses
+python manage.py startapp finances
+
+(settings.py)
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'users',
+    'students',
+    'courses',
+    'finances',
+]
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
+
+AUTH_USER_MODEL = 'users.User'  # Kullanıcı modelini belirt
+
+
+
+users/models.py
+
+from django.contrib.auth.models import AbstractUser
+from django.db import models
+
+class User(AbstractUser):
+    ROLE_CHOICES = [
+        ('admin', 'Yönetici'),
+        ('teacher', 'Öğretmen'),
+        ('student', 'Öğrenci'),
+        ('parent', 'Veli'),
+    ]
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+
+users/views.py
+
+from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login, logout
+from .models import User
+
+def login_view(request):
+    if request.method == 'POST':
+        username = request.POST['username']
+        password = request.POST['password']
+        user = authenticate(request, username=username, password=password)
+        if user:
+            login(request, user)
+            return redirect('dashboard')
+        else:
+            return render(request, 'login.html', {'error': 'Hatalı bilgiler'})
+    return render(request, 'login.html')
+
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+
+users/urls.py
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+]
+
+login.html
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Giriş Yap</title>
+</head>
+<body>
+    <h2>Giriş Yap</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="text" name="username" placeholder="Kullanıcı Adı">
+        <input type="password" name="password" placeholder="Şifre">
+        <button type="submit">Giriş</button>
+    </form>
+    {% if error %}
+    <p style="color: red;">{{ error }}</p>
+    {% endif %}
+</body>
+</html>
+
+students/models.py
+
+from django.db import models
+from users.models import User
+
+class Student(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, limit_choices_to={'role': 'student'})
+    birth_date = models.DateField()
+    grade = models.CharField(max_length=5)
+
+students/views.py
+
+from django.shortcuts import render
+from .models import Student
+
+def student_list(request):
+    students = Student.objects.all()
+    return render(request, 'student_list.html', {'students': students})
+
+students/urls.py
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('students/', views.student_list, name='student_list'),
+]
+
+student_list.html
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Öğrenci Listesi</title>
+</head>
+<body>
+    <h2>Öğrenci Listesi</h2>
+    <ul>
+        {% for student in students %}
+        <li>{{ student.user.username }} - {{ student.grade }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
+
+
+
+courses/models.py
+
+from django.db import models
+
+class Course(models.Model):
+    name = models.CharField(max_length=50)
+    code = models.CharField(max_length=10)
+    teacher = models.ForeignKey('users.User', on_delete=models.CASCADE, limit_choices_to={'role': 'teacher'})
+
+courses/views.py
+
+from django.shortcuts import render
+from .models import Course
+
+def course_list(request):
+    courses = Course.objects.all()
+    return render(request, 'course_list.html', {'courses': courses})
+
+courses/urls.py
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('courses/', views.course_list, name='course_list'),
+]
+
+course_list.html
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ders Listesi</title>
+</head>
+<body>
+    <h2>Ders Listesi</h2>
+    <ul>
+        {% for course in courses %}
+        <li>{{ course.name }} - {{ course.teacher.username }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
+
+
+from django.db import models
+from students.models import Student
+
+class Payment(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    date = models.DateField(auto_now_add=True)
+
+finances/views.py
+
+from django.shortcuts import render
+from .models import Payment
+
+def payment_list(request):
+    payments = Payment.objects.all()
+    return render(request, 'payment_list.html', {'payments': payments})
+
+finances/urls.py
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('payments/', views.payment_list, name='payment_list'),
+]
+
+payment_list.html
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ödeme Listesi</title>
+</head>
+<body>
+    <h2>Ödeme Listesi</h2>
+    <ul>
+        {% for payment in payments %}
+        <li>{{ payment.student.user.username }} - {{ payment.amount }} TL</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
+
+
+obs/urls.py
+
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('users/', include('users.urls')),
+    path('students/', include('students.urls')),
+    path('courses/', include('courses.urls')),
+    path('finances/', include('finances.urls')),
+]
+
+python manage.py makemigrations
+python manage.py migrate
